@@ -1,25 +1,61 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Fastamoni API</title>
     <style>
-      body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:24px;background:#0f1115;color:#e6e6e6}
-      a{color:#61dafb;text-decoration:none}
-      a:hover{text-decoration:underline}
-      .wrap{max-width:880px;margin:0 auto}
-      h1{margin:0 0 8px;font-size:24px}
-      p{margin:0 0 12px;color:#c9c9c9}
-      code{background:#1a1d24;padding:2px 6px;border-radius:4px}
-      ul{line-height:1.7}
-      .card{background:#151923;border:1px solid #273041;border-radius:8px;padding:16px;margin:16px 0}
+      body {
+        font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+          sans-serif;
+        margin: 0;
+        padding: 24px;
+        background: #0f1115;
+        color: #e6e6e6;
+      }
+      a {
+        color: #61dafb;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .wrap {
+        max-width: 880px;
+        margin: 0 auto;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 24px;
+      }
+      p {
+        margin: 0 0 12px;
+        color: #c9c9c9;
+      }
+      code {
+        background: #1a1d24;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      ul {
+        line-height: 1.7;
+      }
+      .card {
+        background: #151923;
+        border: 1px solid #273041;
+        border-radius: 8px;
+        padding: 16px;
+        margin: 16px 0;
+      }
     </style>
   </head>
   <body>
     <div class="wrap">
       <h1>Fastamoni Assessment API</h1>
-      <p>This service provides user accounts, wallets, transaction PINs, and idempotent donations. See the endpoints below.</p>
+      <p>
+        This service provides user accounts, wallets, transaction PINs, and
+        idempotent donations. See the endpoints below.
+      </p>
 
       <div class="card">
         <strong>Health</strong>
@@ -42,21 +78,37 @@
           <li><code>GET /api/wallet</code></li>
           <li><code>POST /api/wallet/create-pin</code></li>
           <li><code>PUT /api/wallet/update-pin</code></li>
-          <li><code>POST /api/wallet/top-up</code> (requires <code>x-topup-secret</code>)</li>
+          <li>
+            <code>POST /api/wallet/top-up</code> (requires
+            <code>x-topup-secret</code>)
+          </li>
         </ul>
       </div>
 
       <div class="card">
         <strong>Donations</strong>
         <ul>
-          <li><code>POST /api/donations/donate</code> (requires <code>Idempotency-Key</code>)</li>
+          <li>
+            <code>POST /api/donations/donate</code> (requires
+            <code>Idempotency-Key</code>)
+          </li>
           <li><code>GET /api/donations/count</code></li>
-          <li><code>GET /api/donations/by-period?startDate=YYYY-MM-DD&amp;endDate=YYYY-MM-DD&amp;page=1&amp;limit=10</code></li>
+          <li>
+            <code
+              >GET
+              /api/donations/by-period?startDate=YYYY-MM-DD&amp;endDate=YYYY-MM-DD&amp;page=1&amp;limit=10</code
+            >
+          </li>
           <li><code>GET /api/donations/:donationId</code></li>
         </ul>
       </div>
 
-      <p>Docs: see the README in this repository and the Postman collection: <a href="{{POSTMAN_LINK}}" target="_blank" rel="noreferrer">Open Postman</a></p>
+      <p>
+        Docs: see the README in this repository and the Postman collection:
+        <a href="{{POSTMAN_LINK}}" target="_blank" rel="noreferrer"
+          >Open Postman</a
+        >
+      </p>
     </div>
   </body>
 </html>

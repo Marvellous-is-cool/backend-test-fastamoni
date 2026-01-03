@@ -1,70 +1,100 @@
 import nodemailer from "nodemailer";
 
-// Validate email configuration on startup (non-blocking)
-const hasEmailConfig = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+// Provider selection: SMTP (default) or RESEND (HTTP API)
+const PROVIDER = (process.env.EMAIL_PROVIDER || "SMTP").toUpperCase();
 
-if (!hasEmailConfig) {
-  console.warn("⚠️  WARNING: EMAIL_USER or EMAIL_PASS not set in .env file");
-  console.warn("⚠️  Email functionality will be disabled");
-}
-
-// Create reusable transporter object using Gmail SMTP
+// Reusable SMTP transporter (if configured)
 let transporter = null;
 
-if (hasEmailConfig) {
-  transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
+async function configureSmtp() {
+  const user = process.env.EMAIL_USER;
+  const pass = process.env.EMAIL_PASS;
+  if (!user || !pass) return null;
+
+  const host = process.env.SMTP_HOST || "smtp.gmail.com";
+  const port = Number(process.env.SMTP_PORT || 465);
+  const secure =
+    String(process.env.SMTP_SECURE || "true").toLowerCase() === "true";
+
+  const tx = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: { user, pass },
     pool: true,
     maxConnections: 5,
     maxMessages: 100,
-    // Add timeouts to prevent hanging
-    connectionTimeout: 5000,
-    greetingTimeout: 3000,
-    socketTimeout: 10000,
+    connectionTimeout: 15000,
+    greetingTimeout: 7000,
+    socketTimeout: 20000,
   });
 
-  // Verify transporter configuration ASYNC (don't block startup)
-  transporter.verify().then(
-    () => {
-      console.log("✅ Gmail email server is ready to send messages");
-    },
-    (error) => {
-      console.error("❌ Gmail transporter configuration error:", error.message);
-      console.error("   Email sending will be disabled");
-      transporter = null; // Disable email if verification fails
-    }
-  );
+  try {
+    await tx.verify();
+    console.log(`✅ SMTP ready (${host}:${port}, secure=${secure})`);
+    return tx;
+  } catch (err) {
+    console.error("❌ SMTP verify failed:", err?.message || err);
+    return null;
+  }
 }
 
-// Function to send thank you email (fully non-blocking)
-const sendThankYouEmail = async (toEmail, senderName) => {
-  // Return immediately if no transporter
-  if (!transporter) {
-    console.log("⚠️  Email disabled - skipping thank you email");
-    return;
+// Initialize provider
+(async () => {
+  if (PROVIDER === "SMTP") {
+    transporter = await configureSmtp();
+    if (!transporter) {
+      console.warn("⚠️  Email disabled (SMTP not available)");
+    }
+  } else if (PROVIDER === "RESEND") {
+    if (!process.env.RESEND_API_KEY) {
+      console.warn("⚠️  RESEND_API_KEY not set; email disabled");
+    } else {
+      console.log("✅ Resend HTTP email provider configured");
+    }
   }
+})();
 
-  // Use setImmediate to ensure this doesn't block
+// Internal send via Resend HTTP API (no extra deps; Node 18+ fetch)
+async function sendViaResend({ from, to, subject, html }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) throw new Error("RESEND_API_KEY missing");
+  const payload = { from, to, subject, html };
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Resend error ${res.status}: ${txt}`);
+  }
+  const json = await res.json();
+  return json;
+}
+
+const fromAddress = () => {
+  const name = process.env.EMAIL_FROM_NAME || "Fastamoni";
+  const addr = process.env.EMAIL_USER || "no-reply@example.com";
+  return `${name} <${addr}>`;
+};
+
+// Function to send thank you email (non-blocking)
+const sendThankYouEmail = async (toEmail, senderName) => {
   setImmediate(async () => {
     try {
-      const mailOptions = {
-        from: `Fastamoni <${process.env.EMAIL_USER}>`,
+      const mail = {
+        from: fromAddress(),
         to: toEmail,
         subject: "Thank You for Your Generous Donation!",
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #333;">Dear ${senderName},</h2>
-            <p style="color: #555; line-height: 1.6;">
-              We noticed that you have made multiple donations through our platform. 
-              Your generosity and continued support is truly appreciated!
-            </p>
-            <p style="color: #555; line-height: 1.6;">
-              Thank you for making a difference.
-            </p>
+            <p style="color: #555; line-height: 1.6;">We noticed that you have made multiple donations through our platform. Your generosity and continued support is truly appreciated!</p>
+            <p style="color: #555; line-height: 1.6;">Thank you for making a difference.</p>
             <br />
             <p style="color: #555;">With gratitude,</p>
             <p style="color: #555;"><strong>The Fastamoni Team</strong></p>
@@ -72,36 +102,45 @@ const sendThankYouEmail = async (toEmail, senderName) => {
         `,
       };
 
-      const info = await transporter.sendMail(mailOptions);
+      if (PROVIDER === "RESEND" && process.env.RESEND_API_KEY) {
+        const info = await sendViaResend(mail);
+        console.log(
+          `✅ Thank you email sent to ${toEmail} (ID: ${info?.id || "ok"})`
+        );
+        return;
+      }
+      if (!transporter) {
+        console.log("⚠️  Email disabled - skipping thank you email");
+        return;
+      }
+      const info = await transporter.sendMail(mail);
       console.log(
         `✅ Thank you email sent to ${toEmail} (ID: ${info.messageId})`
       );
     } catch (error) {
-      console.error("❌ Error sending thank you email:", error.message);
-      // Email failure should never affect the API response
+      console.error(
+        "❌ Error sending thank you email:",
+        error.message || error
+      );
     }
   });
 };
 
 // Function to send generic email
 const sendGenericEmail = async (toEmail, subject, htmlContent) => {
+  const mail = { from: fromAddress(), to: toEmail, subject, html: htmlContent };
+  if (PROVIDER === "RESEND" && process.env.RESEND_API_KEY) {
+    return await sendViaResend(mail);
+  }
   if (!transporter) {
     throw new Error("Email service not configured");
   }
-
   try {
-    const mailOptions = {
-      from: `Fastamoni <${process.env.EMAIL_USER}>`,
-      to: toEmail,
-      subject: subject,
-      html: htmlContent,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
+    const info = await transporter.sendMail(mail);
     console.log(`✅ Email sent to ${toEmail} (ID: ${info.messageId})`);
     return info;
   } catch (error) {
-    console.error("❌ Error sending email:", error.message);
+    console.error("❌ Error sending email:", error.message || error);
     throw error;
   }
 };
