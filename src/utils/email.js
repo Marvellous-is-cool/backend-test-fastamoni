@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 
-// Provider selection: SMTP (default) or RESEND (HTTP API)
+// Provider selection: SMTP (default), GMAIL_OAUTH (OAuth2), or RESEND (HTTP API)
 const PROVIDER = (process.env.EMAIL_PROVIDER || "SMTP").toUpperCase();
 
 // Reusable SMTP transporter (if configured)
@@ -39,12 +39,51 @@ async function configureSmtp() {
   }
 }
 
+async function configureGmailOauth() {
+  const user = process.env.EMAIL_USER;
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
+  if (!user || !clientId || !clientSecret || !refreshToken) return null;
+
+  const tx = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      type: "OAuth2",
+      user,
+      clientId,
+      clientSecret,
+      refreshToken,
+    },
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100,
+    connectionTimeout: 15000,
+    greetingTimeout: 7000,
+    socketTimeout: 20000,
+  });
+
+  try {
+    await tx.verify();
+    console.log("✅ Gmail OAuth2 transporter ready");
+    return tx;
+  } catch (err) {
+    console.error("❌ Gmail OAuth2 verify failed:", err?.message || err);
+    return null;
+  }
+}
+
 // Initialize provider
 (async () => {
   if (PROVIDER === "SMTP") {
     transporter = await configureSmtp();
     if (!transporter) {
       console.warn("⚠️  Email disabled (SMTP not available)");
+    }
+  } else if (PROVIDER === "GMAIL_OAUTH") {
+    transporter = await configureGmailOauth();
+    if (!transporter) {
+      console.warn("⚠️  Email disabled (Gmail OAuth not available)");
     }
   } else if (PROVIDER === "RESEND") {
     if (!process.env.RESEND_API_KEY) {
