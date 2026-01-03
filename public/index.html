@@ -57,6 +57,15 @@
         idempotent donations. See the endpoints below.
       </p>
 
+      <div class="card" id="uptime-card">
+        <strong>Service Uptime</strong>
+        <ul>
+          <li>Started: <code id="startedAt">—</code></li>
+          <li>Now: <code id="now">—</code></li>
+          <li>Uptime: <code id="uptime">—</code></li>
+        </ul>
+      </div>
+
       <div class="card">
         <strong>Health</strong>
         <ul>
@@ -110,5 +119,37 @@
         >
       </p>
     </div>
+    <script>
+      // Poll health endpoint every 5 seconds and render uptime
+      const elStarted = document.getElementById("startedAt");
+      const elNow = document.getElementById("now");
+      const elUptime = document.getElementById("uptime");
+
+      async function fetchHealth() {
+        const paths = ["/api/health", "/api/health"];
+        for (const p of paths) {
+          try {
+            const res = await fetch(p, { cache: "no-store" });
+            if (!res.ok) continue;
+            const data = await res.json();
+            elStarted.textContent = data.startedAt || "—";
+            elNow.textContent = data.now || new Date().toISOString();
+            const secs = Number(data.uptimeSeconds || 0);
+            const h = Math.floor(secs / 3600);
+            const m = Math.floor((secs % 3600) / 60);
+            const s = secs % 60;
+            elUptime.textContent = `${h}h ${m}m ${s}s`;
+            return;
+          } catch (e) {
+            // try next path
+          }
+        }
+        // If both paths failed, show a small hint
+        elUptime.textContent = "unavailable";
+      }
+
+      fetchHealth();
+      setInterval(fetchHealth, 5000);
+    </script>
   </body>
 </html>

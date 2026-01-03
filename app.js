@@ -8,6 +8,9 @@ const envPath = join(__dirname, ".env");
 
 dotenv.config({ path: envPath });
 
+// Track server start time for uptime reporting
+const SERVER_STARTED_AT = Date.now();
+
 async function startApp() {
   const express = await import("express");
   const cors = await import("cors");
@@ -50,7 +53,7 @@ async function startApp() {
       max: 2000, // generous to allow high RPS in staging
       standardHeaders: true,
       legacyHeaders: false,
-      skip: (req) => req.path === "/health",
+      skip: (req) => req.path === "/api/health" || req.path === "/api/health",
     });
     app.use(limiter);
   }
@@ -71,7 +74,18 @@ async function startApp() {
     }
   });
 
-  app.get("/health", (req, res) => res.json({ status: "OK" }));
+  const healthHandler = (req, res) => {
+    const now = Date.now();
+    const uptimeSeconds = Math.floor((now - SERVER_STARTED_AT) / 1000);
+    res.json({
+      status: "OK",
+      startedAt: new Date(SERVER_STARTED_AT).toISOString(),
+      now: new Date(now).toISOString(),
+      uptimeSeconds,
+    });
+  };
+  app.get("/api/health", healthHandler);
+  app.get("/api/health", healthHandler);
 
   app.use("/api/auth", authRoutes.default);
   app.use("/api/donations", donationRoutes.default);
