@@ -1,0 +1,75 @@
+config:
+  target: "http://localhost:3000"
+  processor: "./artillery/processor.cjs"
+  plugins:
+    metrics-by-endpoint: {}
+  phases:
+    - duration: 30 # seconds
+      arrivalRate: 100 # new virtual users per second (100 rps)
+  defaults:
+    headers:
+      Content-Type: "application/json"
+
+scenarios:
+  - name: "Register -> create PIN -> top-up -> donate -> wallet & donations read"
+    flow:
+      - function: "setUnique"
+
+      # 1. Register new user
+      - post:
+          url: "/api/auth/register"
+          json:
+            name: "user-{{ uuid }}"
+            email: "user-{{ uuid }}@example.com"
+            password: "{{ password }}"
+          capture:
+            - json: "$.token"
+              as: "token"
+            - json: "$.user.id"
+              as: "userId"
+
+      # 2. Get wallet (verify creation)
+      - get:
+          url: "/api/wallet"
+          headers:
+            Authorization: "Bearer {{ token }}"
+
+      # 3. Create transaction PIN
+      - post:
+          url: "/api/wallet/create-pin"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          json:
+            pin: "123456"
+
+      # 4. Top-up wallet
+      - post:
+          url: "/api/wallet/top-up"
+          headers:
+            Authorization: "Bearer {{ token }}"
+            x-topup-secret: "{{ $processEnvironment.TOPUP_SECRET }}"
+          json:
+            amount: 100
+
+      # 5. Create donation (with idempotency key)
+      - post:
+          url: "/api/donations/donate"
+          headers:
+            Authorization: "Bearer {{ token }}"
+            Idempotency-Key: "{{ uuid }}-{{ idempotencyKey }}"
+          json:
+            receiverId: "{{ receiverId }}"
+            amount: 1
+            pin: "123456"
+
+      # 6. Get donation count
+      - get:
+          url: "/api/donations/count"
+          headers:
+            Authorization: "Bearer {{ token }}"
+
+      # 7. Get donations by period
+      - get:
+          url: "/api/donations/by-period?startDate=2025-01-01&endDate=2027-12-31&page=1&limit=10"
+          headers:
+            Authorization: "Bearer {{ token }}"
