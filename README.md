@@ -80,7 +80,7 @@ This document explains what I built, how I planned it, how it meets the brief, h
 
 ---
 
-## Security & Data Integrity (Brief, Practical)
+## Security & Data Integrity
 
 - No SQL injection: Prisma uses parameterized queries.
 - Secure secrets: JWT + environment variables.
@@ -88,6 +88,18 @@ This document explains what I built, how I planned it, how it meets the brief, h
 - Helmet headers + rate limiting + JSON size limit for basic hardening.
 - Idempotency: Unique key per donation request. If retried, we return the original transaction.
 - Atomicity: Wallet updates and records are in one DB transaction.
+
+## Email Behavior
+
+- Non-blocking: Email notifications run asynchronously and never block financial transactions.
+- Production dry-run: On Render free tier, live email delivery is disabled to avoid provider/infra limits. In `production`, the app logs queued emails instead of sending them.
+- Dev delivery: In development, Gmail OAuth/SMTP is used for real delivery.
+- Switch-ready: The email utility is provider-agnostic; enabling a verified provider later requires only environment changes.
+
+Rationale:
+
+- Free-tier constraints (cold starts, throttling, TLS latency) made SMTP/OAuth/HTTP providers unreliable without verification or paid plans.
+- To preserve API reliability and atomicity, the system logs emails in production and retains retry logic, allowing seamless activation when a provider is available.
 
 ---
 

@@ -2,6 +2,8 @@ import nodemailer from "nodemailer";
 
 // Provider selection: SMTP (default), GMAIL_OAUTH (OAuth2), or RESEND (HTTP API)
 const PROVIDER = (process.env.EMAIL_PROVIDER || "SMTP").toUpperCase();
+// Free-tier prod behavior: do not attempt live delivery; log instead
+const DRY_RUN = process.env.NODE_ENV === "production";
 
 // Reusable SMTP transporter (if configured)
 let transporter = null;
@@ -168,6 +170,15 @@ const sendThankYouEmail = async (toEmail, senderName) => {
         `,
       };
 
+      if (DRY_RUN) {
+        console.log("Email queued:", {
+          to: mail.to,
+          subject: mail.subject,
+          provider: PROVIDER,
+        });
+        return;
+      }
+
       if (PROVIDER === "RESEND" && process.env.RESEND_API_KEY) {
         const info = await sendViaResend(mail);
         console.log(
@@ -218,6 +229,15 @@ const sendThankYouEmail = async (toEmail, senderName) => {
 // Function to send generic email
 const sendGenericEmail = async (toEmail, subject, htmlContent) => {
   const mail = { from: fromAddress(), to: toEmail, subject, html: htmlContent };
+
+  if (DRY_RUN) {
+    console.log("Email queued:", {
+      to: mail.to,
+      subject: mail.subject,
+      provider: PROVIDER,
+    });
+    return { queued: true };
+  }
 
   if (PROVIDER === "RESEND" && process.env.RESEND_API_KEY) {
     return await sendViaResend(mail);
