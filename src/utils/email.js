@@ -24,9 +24,9 @@ async function configureSmtp() {
     pool: true,
     maxConnections: 5,
     maxMessages: 100,
-    connectionTimeout: 15000,
-    greetingTimeout: 7000,
-    socketTimeout: 20000,
+    connectionTimeout: 30000,
+    greetingTimeout: 15000,
+    socketTimeout: 40000,
   });
 
   try {
@@ -44,7 +44,11 @@ async function configureGmailOauth() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
-  if (!user || !clientId || !clientSecret || !refreshToken) return null;
+
+  if (!user || !clientId || !clientSecret || !refreshToken) {
+    console.warn("⚠️  Gmail OAuth: Missing required credentials");
+    return null;
+  }
 
   const tx = nodemailer.createTransport({
     service: "gmail",
@@ -54,22 +58,45 @@ async function configureGmailOauth() {
       clientId,
       clientSecret,
       refreshToken,
+      // Add access token refresh callback for better reliability
+      accessUrl: "https://oauth2.googleapis.com/token",
     },
     pool: true,
-    maxConnections: 5,
-    maxMessages: 100,
-    connectionTimeout: 15000,
-    greetingTimeout: 7000,
-    socketTimeout: 20000,
+    maxConnections: 3,
+    maxMessages: 50,
+    connectionTimeout: 60000, // 60 seconds for cloud environments
+    greetingTimeout: 30000, // 30 seconds
+    socketTimeout: 90000, // 90 seconds
+    logger: false, // Disable verbose logging in production
+    debug: process.env.NODE_ENV !== "production",
   });
 
+  // Skip verify in production - it often times out but emails still work
+  if (process.env.NODE_ENV === "production") {
+    console.log(
+      "✅ Gmail OAuth2 configured (verification skipped in production)"
+    );
+    console.log("   Email functionality will be tested on first send attempt");
+    return tx;
+  }
+
+  // In development, try to verify with timeout
   try {
-    await tx.verify();
-    console.log("✅ Gmail OAuth2 transporter ready");
+    const verifyPromise = tx.verify();
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Verify timeout after 10s")), 10000)
+    );
+
+    await Promise.race([verifyPromise, timeoutPromise]);
+    console.log("✅ Gmail OAuth2 transporter verified");
     return tx;
   } catch (err) {
-    console.error("❌ Gmail OAuth2 verify failed:", err?.message || err);
-    return null;
+    console.warn(
+      "⚠️  Gmail OAuth2 verify failed (but transporter created):",
+      err?.message || err
+    );
+    console.log("   Emails will still be attempted - errors will show on send");
+    return tx; // Return transporter anyway - it might work when sending
   }
 }
 
@@ -148,13 +175,36 @@ const sendThankYouEmail = async (toEmail, senderName) => {
         );
         return;
       }
+
       if (!transporter) {
         console.log("⚠️  Email disabled - skipping thank you email");
         return;
       }
-      const info = await transporter.sendMail(mail);
-      console.log(
-        `✅ Thank you email sent to ${toEmail} (ID: ${info.messageId})`
+
+      // Add retry logic for production
+      let lastError;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const info = await transporter.sendMail(mail);
+          console.log(
+            `✅ Thank you email sent to ${toEmail} (ID: ${info.messageId})`
+          );
+          return;
+        } catch (error) {
+          lastError = error;
+          console.error(
+            `⚠️  Email attempt ${attempt}/3 failed:`,
+            error.message || error
+          );
+          if (attempt < 3) {
+            await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+          }
+        }
+      }
+
+      console.error(
+        "❌ Error sending thank you email after 3 attempts:",
+        lastError.message || lastError
       );
     } catch (error) {
       console.error(
@@ -168,12 +218,15 @@ const sendThankYouEmail = async (toEmail, senderName) => {
 // Function to send generic email
 const sendGenericEmail = async (toEmail, subject, htmlContent) => {
   const mail = { from: fromAddress(), to: toEmail, subject, html: htmlContent };
+
   if (PROVIDER === "RESEND" && process.env.RESEND_API_KEY) {
     return await sendViaResend(mail);
   }
+
   if (!transporter) {
     throw new Error("Email service not configured");
   }
+
   try {
     const info = await transporter.sendMail(mail);
     console.log(`✅ Email sent to ${toEmail} (ID: ${info.messageId})`);
