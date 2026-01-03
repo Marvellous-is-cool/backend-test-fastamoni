@@ -14,6 +14,7 @@ async function startApp() {
   const bodyParser = await import("body-parser");
   const helmet = await import("helmet");
   const rateLimit = await import("express-rate-limit");
+  const fs = await import("fs/promises");
 
   const authRoutes = await import("./src/routes/authRoutes.js");
   const donationRoutes = await import("./src/routes/donationRoutes.js");
@@ -53,6 +54,22 @@ async function startApp() {
     });
     app.use(limiter);
   }
+
+  // Serve static assets from /public
+  const publicDir = join(__dirname, "public");
+  app.use(express.default.static(publicDir, { index: false }));
+
+  // Landing page served from public/index.html with Postman link injection
+  app.get("/", async (req, res) => {
+    try {
+      let html = await fs.readFile(join(publicDir, "index.html"), "utf8");
+      const postman = process.env.POSTMAN_LINK || "https://www.postman.com/";
+      html = html.replace(/{{POSTMAN_LINK}}/g, postman);
+      res.type("html").send(html);
+    } catch (e) {
+      res.status(200).send("Fastamoni API is running. See /health and README.");
+    }
+  });
 
   app.get("/health", (req, res) => res.json({ status: "OK" }));
 
