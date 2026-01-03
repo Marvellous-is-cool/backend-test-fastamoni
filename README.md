@@ -41,7 +41,7 @@ This document explains what I built, how I planned it, how it meets the brief, h
 
 ---
 
-## How It Works (In Plain Terms)
+## How It Works
 
 - The API server (`app.js`) wires routes for auth, wallet, and donations. It enables CORS, Helmet security headers, JSON limits, and a generous rate limiter.
 - The database client (`src/config/db.js`) makes a single Prisma client and reuses it.
